@@ -1,70 +1,55 @@
 package main
 
 import (
-	"bufio"
+	"flag"
 	"fmt"
-	"net/url"
 	"os"
 	"path/filepath"
-	"sort"
-	"strings"
 	"sync"
 
 	"github.com/StellaShiina/checkurl-go/checker"
+	"github.com/StellaShiina/checkurl-go/fileio"
+	"github.com/StellaShiina/checkurl-go/report"
 )
-
-func read(file string, urls *[]string) error {
-	fileHandler, err := os.Open(file)
-	if err != nil {
-		return err
-	}
-	defer fileHandler.Close()
-
-	scanner := bufio.NewScanner(fileHandler)
-
-	count := -1
-
-	for scanner.Scan() {
-		count++
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-		u, err := url.Parse(line)
-		if err != nil || u.Scheme == "" || (u.Scheme != "http" && u.Scheme != "https") {
-			fmt.Printf("File %s, line %d is not valid\n", file, count)
-			continue
-		}
-		*urls = append(*urls, line)
-	}
-
-	return nil
-}
 
 func main() {
 	fmt.Println("Hello! This is URL checker! A project for practising concurrency!")
 
-	const dataDir = "data"
+	inFile := flag.String("i", "", "input file")
+	inDir := flag.String("d", "", "input dir")
+	outDir := flag.String("o", "", "output dir")
+	numWorkers := flag.Int("n", 20, "max concurrency")
+
+	flag.Parse()
 
 	urls := make([]string, 0, 200)
 
-	files, err := os.ReadDir(dataDir)
-
-	if err != nil {
-		panic(err)
-	}
-
-	for _, file := range files {
-		if file.IsDir() {
-			continue
-		}
-		if file.Name() == "example.txt" {
-			continue
-		}
-		f := filepath.Join(dataDir, file.Name())
-		err := read(f, &urls)
+	if *inFile != "" {
+		err := fileio.ReadUrlsFromDir(*inFile, &urls)
 		if err != nil {
 			panic(err)
+		}
+	}
+
+	if *inDir != "" {
+		files, err := os.ReadDir(*inDir)
+
+		if err != nil {
+			panic(err)
+		}
+
+		for _, file := range files {
+			if file.IsDir() {
+				continue
+			}
+			if file.Name() == "example.txt" {
+				continue
+			}
+			f := filepath.Join(*inDir, file.Name())
+			err := fileio.ReadUrlsFromDir(f, &urls)
+			if err != nil {
+				panic(err)
+			}
 		}
 	}
 
@@ -74,8 +59,7 @@ func main() {
 	results := make(chan checker.CheckResult, numJobs)
 	var wg sync.WaitGroup
 
-	const numWorkers = 20
-	for w := range numWorkers {
+	for w := range *numWorkers {
 		wg.Add(1)
 		go checker.Worker(w, jobs, results, &wg)
 	}
@@ -83,6 +67,8 @@ func main() {
 	for _, url := range urls {
 		jobs <- url
 	}
+
+	urls = nil
 
 	close(jobs)
 
@@ -94,33 +80,20 @@ func main() {
 		finalResults[result.URL] = result
 	}
 
-	var numOK, numFail, numError = 0, 0, 0
+	var report = &report.Report{}
 
-	res := make([]checker.CheckResult, 0, 100)
+	report.GenerateSummary(finalResults)
+	report.PrintSummary()
+	report.PrintOK()
+	// report.PrintFail()
+	report.PrintError()
 
-	for k, v := range finalResults {
-		if v.StatusCode < 200 && v.StatusCode > 0 || v.StatusCode >= 300 {
-			numFail++
-			fmt.Println(k, v.Latency, v.StatusCode, v.StatusText)
-		} else if v.StatusCode == 0 {
-			numError++
-			fmt.Println(k, v.Error)
-		} else {
-			numOK++
-			res = append(res, v)
-			fmt.Println(k, v.Latency, v.StatusCode)
-		}
+	if *outDir == "" {
+		*outDir = filepath.Join("data", "results", "results.txt")
 	}
-
-	sort.Slice(res, func(i, j int) bool {
-		return res[i].Latency < res[j].Latency
-	})
-
-	fmt.Printf("OK: %d, Fail: %d, Error: %d\n", numOK, numFail, numError)
-
-	fmt.Println("OK URLs:")
-
-	for i, r := range res {
-		fmt.Println(i, r.URL, r.Latency)
+	err := fileio.WriteResultsToFile(*outDir, report.OK, true)
+	if err != nil {
+		panic(err)
 	}
+	fmt.Println("Mission accomplished!")
 }
