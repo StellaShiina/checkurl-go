@@ -58,6 +58,9 @@ func main() {
 		if file.IsDir() {
 			continue
 		}
+		if file.Name() == "example.txt" {
+			continue
+		}
 		f := filepath.Join(dataDir, file.Name())
 		err := read(f, &urls)
 		if err != nil {
