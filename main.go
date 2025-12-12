@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 
@@ -70,7 +71,7 @@ func main() {
 	results := make(chan checker.CheckResult, numJobs)
 	var wg sync.WaitGroup
 
-	const numWorkers = 10
+	const numWorkers = 20
 	for w := range numWorkers {
 		wg.Add(1)
 		go checker.Worker(w, jobs, results, &wg)
@@ -90,7 +91,33 @@ func main() {
 		finalResults[result.URL] = result
 	}
 
+	var numOK, numFail, numError = 0, 0, 0
+
+	res := make([]checker.CheckResult, 0, 100)
+
 	for k, v := range finalResults {
-		fmt.Println(k, v.StatusCode)
+		if v.StatusCode < 200 && v.StatusCode > 0 || v.StatusCode >= 300 {
+			numFail++
+			fmt.Println(k, v.Latency, v.StatusCode, v.StatusText)
+		} else if v.StatusCode == 0 {
+			numError++
+			fmt.Println(k, v.Error)
+		} else {
+			numOK++
+			res = append(res, v)
+			fmt.Println(k, v.Latency, v.StatusCode)
+		}
+	}
+
+	sort.Slice(res, func(i, j int) bool {
+		return res[i].Latency < res[j].Latency
+	})
+
+	fmt.Printf("OK: %d, Fail: %d, Error: %d\n", numOK, numFail, numError)
+
+	fmt.Println("OK URLs:")
+
+	for i, r := range res {
+		fmt.Println(i, r.URL, r.Latency)
 	}
 }

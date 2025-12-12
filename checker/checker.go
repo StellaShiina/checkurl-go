@@ -9,7 +9,17 @@ import (
 
 var defaultClient = &http.Client{Timeout: 5 * time.Second}
 
-const ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+// User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:146.0) Gecko/20100101 Firefox/146.0
+// Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8
+// Accept-Language: en-US,en
+// Accept-Encoding: gzip, deflate, br, zstd
+// Connection: keep-alive
+
+const UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:146.0) Gecko/20100101 Firefox/146.0"
+const Accept = "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+const AcceptLanguage = "en-US,en"
+const AcceptEncoding = "gzip, deflate, br, zstd"
+const Connection = "keep-alive"
 
 type CheckResult struct {
 	URL        string
@@ -24,8 +34,11 @@ func check(c *http.Client, url string) (*http.Response, time.Duration, error) {
 	if err != nil {
 		return nil, 0, err
 	}
-	req.Header.Set("User-Agent", ua)
-	req.Header.Set("Accept", "*/*")
+	req.Header.Set("User-Agent", UserAgent)
+	req.Header.Set("Accept", Accept)
+	req.Header.Set("Accept-Language", AcceptLanguage)
+	req.Header.Set("Accept-Encoding", AcceptEncoding)
+	req.Header.Set("Connection", Connection)
 	start := time.Now()
 	resp, err := c.Do(req)
 	latency := time.Since(start)
